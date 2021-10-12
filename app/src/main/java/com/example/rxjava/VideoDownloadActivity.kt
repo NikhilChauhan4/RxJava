@@ -11,13 +11,13 @@ import com.example.rxjava.appconstants.AppConstants
 import com.example.rxjava.model.Video
 import com.example.rxjava.recyclerview.VideoAdapter
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
+import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
-import io.reactivex.rxjava3.subscribers.ResourceSubscriber
+import io.reactivex.rxjava3.subscribers.DisposableSubscriber
 import okhttp3.OkHttpClient
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 import kotlin.collections.ArrayList
 
 
@@ -25,6 +25,7 @@ class VideoDownloadActivity : AppCompatActivity() {
     lateinit var recyclerView: RecyclerView
     var videoList: ArrayList<Video> = ArrayList()
     var videoAdapter = VideoAdapter(videoList)
+    lateinit var compositeDisposable: CompositeDisposable
     private val videoDownloader by lazy {
         VideoDownloader(
             OkHttpClient.Builder().build()
@@ -35,10 +36,10 @@ class VideoDownloadActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_video_download)
         recyclerView = findViewById(R.id.recycler_view)
-
+        compositeDisposable = CompositeDisposable()
         videoAdapter.setOnItemClickListener(object : VideoAdapter.ClickListener {
             override fun onItemClick(position: Int, v: View?) {
-                Log.d(AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY, "onItemClick: "+"item clicked")
+                Log.d(AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY, "onItemClick: " + "item clicked")
                 downloadVideoFile(videoList[position].videoDownloadLink)
             }
 
@@ -77,39 +78,62 @@ class VideoDownloadActivity : AppCompatActivity() {
         val timeStamp: String = SimpleDateFormat("yyyyMMdd_HHmmss").format(Date())
         val targetFile = File(myDir, "video_" + timeStamp + ".mp4")
 
-        val flowable = videoDownloader.downloadVideo(
-            url,
-            targetFile
+
+        Log.d(
+            AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY,
+            "downloadVideoFile: " + compositeDisposable.size()
         )
-        flowable.throttleFirst(2, TimeUnit.SECONDS)
-            .subscribeOn(Schedulers.io())
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe(object : ResourceSubscriber<Int>() {
-                override fun onNext(t: Int) {
-                }
+        try {
 
-                override fun onError(t: Throwable?) {
-                    Log.d(AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY, "onError: " + t?.message)
-                    Toast.makeText(
-                        this@VideoDownloadActivity,
-                        "Download failed",
-                        Toast.LENGTH_SHORT
-                    ).show()
+            compositeDisposable.add(
+                videoDownloader.downloadVideo(
+                    url,
+                    targetFile
+                )
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribeWith(object : DisposableSubscriber<Int>() {
+                        override fun onNext(t: Int) {
+                            Log.d(AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY, "onNext: " + t)
+                        }
 
-                }
+                        override fun onError(t: Throwable?) {
+                            Log.d(
+                                AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY,
+                                "onError: " + t?.message
+                            )
+                            Toast.makeText(
+                                this@VideoDownloadActivity,
+                                "Download failed",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
 
-                override fun onComplete() {
-                    Toast.makeText(
-                        this@VideoDownloadActivity,
-                        "Downloaded Successfully",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    Log.d(
-                        AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY,
-                        "onComplete: " + "download successful"
-                    )
-                }
-            })
+                        override fun onComplete() {
+                            Toast.makeText(
+                                this@VideoDownloadActivity,
+                                "Downloaded Successfully",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            Log.d(
+                                AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY,
+                                "onComplete: " + "download successful"
+                            )
+                        }
+
+                    })
+            )
+        } catch (e: Exception) {
+            Log.d(
+                AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY,
+                "downloadVideoFile: " + "error " + e.message
+            )
+        }
     }
 
+    override fun onStop() {
+        super.onStop()
+        Log.d(AppConstants.TAG_VIDEO_DOWNLOAD_ACTIVITY, "onStop: " + "inside onStop")
+        compositeDisposable.clear()
+    }
 }

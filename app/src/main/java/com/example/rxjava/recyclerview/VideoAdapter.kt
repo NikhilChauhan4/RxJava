@@ -30,7 +30,7 @@ class VideoAdapter(val videosList: ArrayList<Video>) :
 
 
         override fun onClick(view: View) {
-            clickListener.onItemClick(getAdapterPosition(), view);
+            clickListener.onItemClick(adapterPosition, view);
         }
 
     }
